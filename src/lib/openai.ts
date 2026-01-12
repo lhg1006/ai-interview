@@ -1,13 +1,15 @@
 import OpenAI from 'openai';
-import { InterviewSetup, InterviewQuestion, QuestionFeedback, InterviewReport } from '@/types/interview';
+import Anthropic from '@anthropic-ai/sdk';
+import { InterviewSetup, InterviewQuestion, InterviewReport } from '@/types/interview';
+
+export type AIProvider = 'openai' | 'claude';
 
 // 면접 질문 생성
 export async function generateQuestions(
   apiKey: string,
-  setup: InterviewSetup
+  setup: InterviewSetup,
+  provider: AIProvider = 'openai'
 ): Promise<InterviewQuestion[]> {
-  const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
-
   const prompt = `당신은 전문 면접관입니다. 다음 지원자 정보를 바탕으로 면접 질문 7개를 생성해주세요.
 
 지원자 정보:
@@ -33,24 +35,48 @@ JSON 형식으로 응답해주세요:
   }
 ]`;
 
-  const response = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: '당신은 한국어로 응답하는 전문 면접관입니다. JSON 형식으로만 응답합니다.' },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.7,
-  });
+  if (provider === 'claude') {
+    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 
-  const content = response.choices[0]?.message?.content || '[]';
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2048,
+      messages: [{ role: 'user', content: prompt }],
+      system: '당신은 한국어로 응답하는 전문 면접관입니다. JSON 형식으로만 응답합니다.',
+    });
 
-  try {
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+    const content = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    try {
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (e) {
+      console.error('Failed to parse questions:', e);
     }
-  } catch (e) {
-    console.error('Failed to parse questions:', e);
+  } else {
+    const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: '당신은 한국어로 응답하는 전문 면접관입니다. JSON 형식으로만 응답합니다.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.7,
+    });
+
+    const content = response.choices[0]?.message?.content || '[]';
+
+    try {
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (e) {
+      console.error('Failed to parse questions:', e);
+    }
   }
 
   return [];
@@ -60,10 +86,9 @@ JSON 형식으로 응답해주세요:
 export async function* streamFeedback(
   apiKey: string,
   question: InterviewQuestion,
-  answer: string
+  answer: string,
+  provider: AIProvider = 'openai'
 ): AsyncGenerator<string> {
-  const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
-
   const prompt = `면접 질문과 지원자의 답변을 분석해주세요.
 
 질문 (${question.category}): ${question.question}
@@ -83,20 +108,39 @@ export async function* streamFeedback(
 
 **점수: X/10**`;
 
-  const stream = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: '당신은 친절하고 건설적인 피드백을 제공하는 면접 코치입니다. 한국어로 응답합니다.' },
-      { role: 'user', content: prompt }
-    ],
-    stream: true,
-    temperature: 0.7,
-  });
+  if (provider === 'claude') {
+    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 
-  for await (const chunk of stream) {
-    const content = chunk.choices[0]?.delta?.content;
-    if (content) {
-      yield content;
+    const stream = await client.messages.stream({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+      system: '당신은 친절하고 건설적인 피드백을 제공하는 면접 코치입니다. 한국어로 응답합니다.',
+    });
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        yield event.delta.text;
+      }
+    }
+  } else {
+    const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+
+    const stream = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: '당신은 친절하고 건설적인 피드백을 제공하는 면접 코치입니다. 한국어로 응답합니다.' },
+        { role: 'user', content: prompt }
+      ],
+      stream: true,
+      temperature: 0.7,
+    });
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) {
+        yield content;
+      }
     }
   }
 }
@@ -106,10 +150,9 @@ export async function generateReport(
   apiKey: string,
   setup: InterviewSetup,
   questions: InterviewQuestion[],
-  answers: { questionId: string; answer: string }[]
+  answers: { questionId: string; answer: string }[],
+  provider: AIProvider = 'openai'
 ): Promise<InterviewReport> {
-  const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
-
   const qaList = questions.map((q, i) => {
     const answer = answers.find(a => a.questionId === q.id)?.answer || '(답변 없음)';
     return `Q${i + 1}. [${q.category}] ${q.question}\nA: ${answer}`;
@@ -141,24 +184,48 @@ ${qaList}
   "generalAdvice": ["조언1", "조언2", "조언3"]
 }`;
 
-  const response = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: '당신은 전문 면접 코치입니다. JSON 형식으로만 응답합니다.' },
-      { role: 'user', content: prompt }
-    ],
-    temperature: 0.5,
-  });
+  if (provider === 'claude') {
+    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 
-  const content = response.choices[0]?.message?.content || '{}';
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: prompt }],
+      system: '당신은 전문 면접 코치입니다. JSON 형식으로만 응답합니다.',
+    });
 
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+    const content = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (e) {
+      console.error('Failed to parse report:', e);
     }
-  } catch (e) {
-    console.error('Failed to parse report:', e);
+  } else {
+    const client = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: '당신은 전문 면접 코치입니다. JSON 형식으로만 응답합니다.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.5,
+    });
+
+    const content = response.choices[0]?.message?.content || '{}';
+
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (e) {
+      console.error('Failed to parse report:', e);
+    }
   }
 
   return {
