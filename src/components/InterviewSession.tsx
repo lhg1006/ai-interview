@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
 import { InterviewQuestion, UserAnswer } from '@/types/interview';
 
 interface InterviewSessionProps {
@@ -159,11 +160,9 @@ export default function InterviewSession({
                 피드백 생성 중...
               </div>
             ) : (
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <p className="whitespace-pre-wrap text-gray-800 dark:text-gray-200">
-                  {feedbackContent}
-                  {isLoadingFeedback && <span className="inline-block h-4 w-1 animate-pulse bg-blue-500 ml-1" />}
-                </p>
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-gray-900 dark:prose-headings:text-white prose-strong:text-gray-900 dark:prose-strong:text-white prose-li:text-gray-700 dark:prose-li:text-gray-300">
+                <ReactMarkdown>{feedbackContent}</ReactMarkdown>
+                {isLoadingFeedback && <span className="inline-block h-4 w-1 animate-pulse bg-blue-500 ml-1" />}
               </div>
             )}
           </div>
