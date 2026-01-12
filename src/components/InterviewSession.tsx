@@ -160,7 +160,7 @@ export default function InterviewSession({
                 피드백 생성 중...
               </div>
             ) : (
-              <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-gray-900 dark:prose-headings:text-white prose-strong:text-gray-900 dark:prose-strong:text-white prose-li:text-gray-700 dark:prose-li:text-gray-300">
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-gray-900 dark:prose-headings:text-white prose-strong:text-gray-900 dark:prose-strong:text-white prose-li:text-gray-700 dark:prose-li:text-gray-300 prose-p:my-3 prose-ul:my-2 prose-strong:block prose-strong:mt-4 prose-strong:mb-2">
                 <ReactMarkdown>{feedbackContent}</ReactMarkdown>
                 {isLoadingFeedback && <span className="inline-block h-4 w-1 animate-pulse bg-blue-500 ml-1" />}
               </div>
