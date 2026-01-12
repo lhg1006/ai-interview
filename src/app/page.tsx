@@ -13,14 +13,12 @@ import {
   InterviewReport as IReport,
   InterviewPhase,
 } from '@/types/interview';
-import { generateQuestions, streamFeedback, generateReport, AIProvider } from '@/lib/openai';
+import { generateQuestions, streamFeedback, generateReport } from '@/lib/openai';
 
 const API_KEY_STORAGE_KEY = 'ai-interview-api-key';
-const PROVIDER_STORAGE_KEY = 'ai-interview-provider';
 
 export default function Home() {
   const [apiKey, setApiKey] = useState<string | null>(null);
-  const [provider, setProvider] = useState<AIProvider>('openai');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
 
@@ -37,28 +35,22 @@ export default function Home() {
   // 초기화
   useEffect(() => {
     const savedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-    const savedProvider = localStorage.getItem(PROVIDER_STORAGE_KEY) as AIProvider;
     if (savedKey) setApiKey(savedKey);
-    if (savedProvider) setProvider(savedProvider);
 
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     setIsDark(prefersDark);
     document.documentElement.classList.toggle('dark', prefersDark);
   }, []);
 
-  const handleSaveApiKey = (key: string, selectedProvider: AIProvider) => {
+  const handleSaveApiKey = (key: string) => {
     localStorage.setItem(API_KEY_STORAGE_KEY, key);
-    localStorage.setItem(PROVIDER_STORAGE_KEY, selectedProvider);
     setApiKey(key);
-    setProvider(selectedProvider);
     setIsModalOpen(false);
   };
 
   const handleClearApiKey = () => {
     localStorage.removeItem(API_KEY_STORAGE_KEY);
-    localStorage.removeItem(PROVIDER_STORAGE_KEY);
     setApiKey(null);
-    setProvider('openai');
   };
 
   const toggleDarkMode = () => {
@@ -79,7 +71,7 @@ export default function Home() {
       setSetup(interviewSetup);
 
       try {
-        const generatedQuestions = await generateQuestions(apiKey, interviewSetup, provider);
+        const generatedQuestions = await generateQuestions(apiKey, interviewSetup);
         setQuestions(generatedQuestions);
         setPhase('interview');
       } catch (error) {
@@ -89,7 +81,7 @@ export default function Home() {
         setIsLoading(false);
       }
     },
-    [apiKey, provider]
+    [apiKey]
   );
 
   // 피드백 생성
@@ -101,7 +93,7 @@ export default function Home() {
       setFeedbackContent('');
 
       try {
-        for await (const chunk of streamFeedback(apiKey, question, answer, provider)) {
+        for await (const chunk of streamFeedback(apiKey, question, answer)) {
           setFeedbackContent((prev) => prev + chunk);
         }
       } catch (error) {
@@ -111,7 +103,7 @@ export default function Home() {
         setIsLoadingFeedback(false);
       }
     },
-    [apiKey, provider]
+    [apiKey]
   );
 
   // 면접 완료 - 리포트 생성
@@ -128,8 +120,7 @@ export default function Home() {
           apiKey,
           setup,
           questions,
-          userAnswers.map((a) => ({ questionId: a.questionId, answer: a.answer })),
-          provider
+          userAnswers.map((a) => ({ questionId: a.questionId, answer: a.answer }))
         );
         setReport(generatedReport);
         setPhase('report');
@@ -141,7 +132,7 @@ export default function Home() {
         setIsLoading(false);
       }
     },
-    [apiKey, setup, questions, provider]
+    [apiKey, setup, questions]
   );
 
   // 재시작
@@ -190,11 +181,7 @@ export default function Home() {
 
             {apiKey ? (
               <div className="flex items-center gap-2">
-                <span className={`flex items-center gap-1.5 text-sm ${
-                  provider === 'claude'
-                    ? 'text-orange-600 dark:text-orange-400'
-                    : 'text-green-600 dark:text-green-400'
-                }`}>
+                <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-400">
                   <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                     <path
                       fillRule="evenodd"
@@ -202,7 +189,7 @@ export default function Home() {
                       clipRule="evenodd"
                     />
                   </svg>
-                  {provider === 'claude' ? 'Claude' : 'OpenAI'}
+                  연결됨
                 </span>
                 <button
                   onClick={handleClearApiKey}
@@ -268,7 +255,7 @@ export default function Home() {
       <footer className="border-t border-gray-200 py-6 dark:border-gray-800">
         <div className="mx-auto max-w-4xl px-6 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Built with Next.js, OpenAI & Claude
+            Built with Next.js & OpenAI
           </p>
           <p className="mt-1 text-sm text-gray-400">
             <a href="https://github.com/lhg1006" target="_blank" className="hover:text-blue-500">
@@ -282,7 +269,6 @@ export default function Home() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveApiKey}
-        currentProvider={provider}
       />
     </div>
   );
