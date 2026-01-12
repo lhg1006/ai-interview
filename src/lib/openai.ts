@@ -79,9 +79,7 @@ export async function* streamFeedback(
 - (보완이 필요한 점들)
 
 **예시 답변:**
-(더 나은 답변 예시)
-
-**점수: X/10**`;
+(더 나은 답변 예시)`;
 
   const stream = await client.chat.completions.create({
     model: 'gpt-4o-mini',
